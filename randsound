@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+
+infile="$1"
+[ $infile ] || fail "No input file given!"
+
+source $( dirname $0 )/utils
+
+function apply_cut {
+
+  local file="$1"
+  local min_cuts="$2"
+  local max_cuts="$3"
+
+  local tag="cut"
+  indur=$( filedur "$file" )
+
+  echo "Cutting input file $file ... "
+
+  prev=
+  fnum=0
+  slicelen=$( rrange "$indur/$3" "$indur/$2" )
+  for slice in $( seq -f "%0.2f" 0 $slicelen $indur ) ; do 
+    if [ $prev ]; then
+      cutfile=$( apply_tag "$infile" "$tag" "$fnum" )
+      sfedit cut 1 $infile $cutfile $prev $slice >/dev/null
+      fnum=$[ fnum + 1 ]
+    fi
+    prev=$slice
+  done
+
+}
+
+function apply_speed {
+
+  local file="$1"
+  local target="$2"
+  local tag="$3"
+  local min_breaks="$4"
+  local max_breaks="$5"
+
+  echo "Applying random speed changes ... "
+
+  fnum=0
+  breaks=$( rrange "$min_breaks" "$max_breaks" )
+  for pfile in $( with_tag $file "$target" ); do
+
+    fdur=$( filedur "$pfile" )
+    lindur=$( div "$fdur" "$breaks" )
+
+    > temp.txt
+    for t in $( seq -f "%0.2f" 0 $lindur $fdur ); do
+      r=$( rrange "0.5" "3.0" )
+      echo "$t $r" >> temp.txt
+    done
+
+    spdfile=$( apply_tag "$file" "$tag" "$fnum" )
+    modify speed 1 $pfile $spdfile temp.txt >/dev/null
+    fnum=$[ fnum + 1 ]
+
+  done
+
+}
+
+
+function apply_sort {
+
+  local infile="$1"
+  local target="$2"
+  local tag="$3"
+
+  echo "Sorting file data ... "
+
+  fnum=0
+  for pfile in $( with_tag $infile "$target" ); do
+
+    chunklen=$( rrange "12" "40" )
+    chunklen=$( div "$chunklen" "1000" )
+    smoove=$( div "$chunklen" "8" )
+    sortfile=$( apply_tag "$infile" "$tag" "$fnum" )
+    sortop=$(( $RANDOM % 4 + 1 ))
+    sorter sorter $sortop $pfile $sortfile $chunklen -s${smoove} >/dev/null
+    fnum=$[ fnum + 1 ]
+
+  done
+
+}
+
+
+function apply_rep {
+
+  local infile="$1"
+  local target="$2"
+  local tag="$3"
+
+  echo "Applying waveset repeats ... "
+
+  fnum=0
+  for pfile in $( with_tag "$infile" "$target" ); do
+
+    repfile=$( apply_tag "$infile" "$tag" "$fnum" )
+    ./repfun $pfile $repfile >/dev/null
+    fnum=$[ fnum + 1 ]
+
+  done
+
+}
+
+function apply_mod {
+
+  local infile="$1"
+  local target="$2"
+  local tag="$3"
+  local min_breaks="$4"
+  local max_breaks="$5"
+
+  echo "Applying modulation ... "
+
+  fnum=0
+  breaks=$( rrange "$min_breaks" "$max_breaks" )
+  for pfile in $( with_tag "$infile" "$target" ); do
+
+    fdur=$( filedur "$pfile" )
+    lindur=$( div "$fdur" "$breaks" )
+
+    > temp.txt
+    for t in $( seq -f "%0.2f" 0 $lindur $fdur ); do
+      r=$( rrange "150" "4500" )
+      echo "$t $r" >> temp.txt
+    done
+
+    modfile=$( apply_tag "$infile" "$tag" "$fnum" )
+    modify radical 5 $pfile $modfile temp.txt > /dev/null
+    fnum=$[ fnum + 1 ]
+
+  done
+
+}
+
+cleanup "$infile" "cut spd sort rep mod"
+to_mono "$infile"
+
+apply_cut   "$infile" 5 12
+apply_mod   "$infile" "cut" "mod" "20" "80"
+apply_speed "$infile" "mod" "spd" "10" "40"
+apply_rep   "$infile" "spd" "rep"
+apply_sort  "$infile" "rep" "sort"
+
+exit 0

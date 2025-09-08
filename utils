@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+
+function fail {
+  local msg="$1"
+  echo "$msg" >&2
+  exit 1
+}
+
+function filedur {
+  local file="$1"
+  sfprops "$file" | awk '$1=="duration" { print $3 }'
+}
+
+function filechans {
+  local file="$1"
+  sfprops "$file" | awk '$1=="Channels" {print $3}'
+}
+
+function cleanup {
+
+  local infile="$1"
+  local suffixes=( $2 )
+
+  local fname="${infile%%.*}"
+  local fext="${infile##*.}"
+
+  for suffix in ${suffixes[@]}; do
+    rm -f ${fname}-${suffix}*.${fext}
+  done
+
+}
+
+function rrange {
+
+  local min="$1"
+  local max="$2"
+  
+  echo "scale=4; ($RANDOM/32767 * ($max-$min)) + $min" | bc | xargs printf "%2.4f"
+
+}
+
+function div {
+
+  local dividend="$1"
+  local divisor="$2"
+
+  echo "scale=4; $dividend/$divisor" | bc | xargs printf "%2.4f"
+
+}
+
+# This is pretty dumb, it blindly extracts the left channel
+function to_mono {
+
+  local infile="$1"
+  local inchans=$( filechans "$infile" )
+
+  if [ $inchans -eq 2 ]; then
+    housekeep chans 1 $infile 1
+    outfile=${infile/\.wav/_c1}.wav
+    stfile=${infile/\.wav/_stereo}.wav
+    mv $infile $stfile
+    mv $outfile $infile
+  fi
+
+}
+
+function apply_tag {
+
+  local infile="$1"
+  local tag="$2"
+  local fnum="$3"
+
+  local fname="${infile%%.*}"
+  local fext="${infile##*.}"
+  local base=${fname%%\-*}
+
+  echo "${base}-${tag}${fnum}.$fext"
+
+}
+
+function with_tag {
+
+  local infile="$1"
+  local tag="$2"
+
+  local fname="${infile%%.*}"
+  local fext="${infile##*.}"
+
+  shopt -s nullglob
+  echo ${fname}-${tag}*
+  shopt -u nullglob
+
+}

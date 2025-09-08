@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+
+source $( dirname $0 )/utils
+
+infile="$1"
+[ $infile ] || fail "Input file not specified!"
+[ -f $infile ] || fail "Input file $infile not found!"
+
+outfile="$2"
+[ $outfile ] || fail "Output file not specified!"
+rm -f $outfile
+
+indur=$( sfprops $infile | awk '$1=="duration" { print $3 }' )
+
+function collatz {
+
+  local n="$1"
+  local cruns="$2"
+
+  for x in $( seq 1 $cruns ); do
+    if [[ $[ $n % 2 ] -eq 0 ]]; then
+      n=$[ n / 2 ]
+    else
+      n=$[ (3 * n) + 1 ]
+    fi
+  done
+  echo $n
+
+}
+
+> cycfile.txt
+> repfile.txt
+
+breaks=$( echo "scale=4; (($RANDOM/32767)) * 60 + 20" | bc | xargs printf "%02.4f" )
+seqstep=$( echo "scale=4; $indur / $breaks" | bc | xargs printf "%02.4f" )
+
+maxcycs=128
+maxreps=16
+
+break=0
+cycs=$[ maxcycs / 2 ]
+reps=$[ maxreps / 2 ]
+
+for t in $( seq 0.0 $seqstep $indur ); do 
+
+  cruns=$( echo "scale=4;($RANDOM/32767) * $break" | bc | xargs printf "%2d" 2>/dev/null )
+  if [[ $cruns -gt 0 ]]; then
+    cycs=$( collatz "$[cycs*4]" "$cruns" )
+    reps=$( collatz "$[reps+3]" "$cruns" )
+  fi
+
+  if [[ $cycs -lt 2 || $cycs -gt $maxcycs ]]; then
+    cycs=$[ maxcycs / 2 ]
+  fi
+
+  if [[ $reps -lt 2 || $reps -gt $maxreps ]]; then
+    reps=$[ maxreps / 2 ]
+  fi
+
+  echo "$t $cycs" >> cycfile.txt
+  echo "$t $reps" >> repfile.txt
+
+  break=$[ break + 1 ]
+done
+
+distort repeat $infile $outfile repfile.txt -ccycfile.txt
